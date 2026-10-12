@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FSK CSV to Excel</title>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
+    background: #0f0f1a;
+    color: #cbd5e1;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .header {
+    width: 100%;
+    padding: 18px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: linear-gradient(135deg, #1e1e3a 0%, #1a1a2e 100%);
+    border-bottom: 1px solid rgba(99,102,241,0.25);
+  }
+  .header-l {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .header-icon {
+    width: 30px; height: 30px; border-radius: 8px;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 14px; font-weight: 700;
+  }
+  .header-title { font-size: 16px; font-weight: 600; color: #e2e8f0; letter-spacing: -0.2px; }
+  .header-sub  { font-size: 12px; color: #64748b; margin-left: 4px; }
+
+  .container {
+    width: 100%; max-width: 900px;
+    padding: 32px 24px;
+    display: flex; flex-direction: column; gap: 24px;
+  }
+
+  /* ---- tabs ---- */
+  .tabs {
+    display: flex; gap: 0;
+    border-radius: 10px; overflow: hidden;
+    border: 1px solid #1e293b;
+  }
+  .tab-btn {
+    flex: 1; padding: 10px 16px; border: none; cursor: pointer;
+    font-size: 13px; font-weight: 600; color: #64748b;
+    background: rgba(255,255,255,0.03);
+    transition: all 0.15s;
+  }
+  .tab-btn.active {
+    background: rgba(99,102,241,0.12);
+    color: #818cf8;
+    box-shadow: inset 0 -2px 0 #6366f1;
+  }
+  .tab-btn:hover:not(.active) { color: #94a3b8; background: rgba(255,255,255,0.05); }
+
+  /* ---- drop zone ---- */
+  .drop-zone {
+    border: 2px dashed #334155;
+    border-radius: 14px;
+    padding: 40px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: rgba(255,255,255,0.02);
+  }
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: #6366f1;
+    background: rgba(99,102,241,0.06);
+  }
+  .drop-zone .icon   { font-size: 32px; margin-bottom: 10px; opacity: 0.5; }
+  .drop-zone .label  { font-size: 14px; font-weight: 500; color: #94a3b8; }
+  .drop-zone .hint   { font-size: 12px; color: #64748b; margin-top: 4px; }
+  .drop-zone input   { display: none; }
+
+  /* ---- textarea ---- */
+  .paste-area { display: none; }
+  .paste-area textarea {
+    width: 100%; height: 200px;
+    background: #0f0f23; border: 1px solid #334155;
+    border-radius: 10px; padding: 14px;
+    color: #cbd5e1; font-family: 'SF Mono','Fira Code','Consolas',monospace;
+    font-size: 12px; line-height: 1.6; resize: vertical;
+    outline: none; transition: border-color 0.15s;
+  }
+  .paste-area textarea:focus { border-color: #6366f1; }
+
+  /* ---- preview table ---- */
+  .preview-wrap {
+    max-height: 360px; overflow: auto;
+    border: 1px solid #1e293b; border-radius: 10px;
+    display: none;
+  }
+  .preview-wrap::-webkit-scrollbar { width: 4px; height: 4px; }
+  .preview-wrap::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+
+  table.preview {
+    width: 100%; border-collapse: collapse;
+    font-size: 12px; table-layout: auto;
+  }
+  table.preview thead { position: sticky; top: 0; z-index: 1; }
+  table.preview th {
+    background: #1a1a2e; color: #818cf8; font-weight: 600;
+    padding: 10px 14px; text-align: left; white-space: nowrap;
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
+    border-bottom: 1px solid #334155;
+  }
+  table.preview td {
+    padding: 8px 14px; color: #cbd5e1;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  table.preview tr:hover td { background: rgba(99,102,241,0.06); }
+
+  /* ---- actions ---- */
+  .actions {
+    display: flex; gap: 12px; align-items: center;
+    justify-content: space-between;
+  }
+  .actions-r { display: flex; gap: 10px; }
+
+  .btn {
+    padding: 10px 20px; border: none; border-radius: 10px;
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    transition: all 0.15s; letter-spacing: -0.1px;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: #fff;
+  }
+  .btn-primary:hover {
+    box-shadow: 0 4px 16px rgba(99,102,241,0.35);
+    transform: translateY(-1px);
+  }
+  .btn-secondary {
+    background: rgba(255,255,255,0.06); color: #cbd5e1;
+    border: 1px solid #334155;
+  }
+  .btn-secondary:hover { background: rgba(255,255,255,0.1); border-color: #6366f1; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
+
+  .status {
+    font-size: 13px; color: #64748b;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .status-dot.ok   { background: #10b981; }
+  .status-dot.warn { background: #f59e0b; }
+
+  /* ---- clear ---- */
+  .clear-btn { background: none; border: none; color: #ef4444; font-size: 12px; cursor: pointer; padding: 4px 8px; }
+  .clear-btn:hover { text-decoration: underline; }
+
+  .footer {
+    padding: 16px 24px; border-top: 1px solid rgba(255,255,255,0.04);
+    text-align: center; width: 100%;
+    font-size: 11px; color: #475569;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-l">
+    <div class="header-icon">FSK</div>
+    <div>
+      <span class="header-title">CSV to Excel</span>
+      <span class="header-sub">轻量转换工具</span>
+    </div>
+  </div>
+  <div class="header-sub">拖拽 / 粘贴 / 导出</div>
+</div>
+
+<div class="container">
+
+  <!-- tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="upload">上传 CSV 文件</button>
+    <button class="tab-btn" data-tab="paste">粘贴 CSV 内容</button>
+  </div>
+
+  <!-- upload -->
+  <div class="drop-zone" id="dropZone">
+    <div class="icon">CSV</div>
+    <div class="label">拖拽 CSV 文件到此处</div>
+    <div class="hint">或点击选择文件 · 支持 .csv .tsv .txt</div>
+    <input type="file" id="fileInput" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values">
+  </div>
+
+  <!-- paste -->
+  <div class="paste-area" id="pasteArea">
+    <textarea id="csvText" placeholder="在此粘贴 CSV 内容...&#10;&#10;例如：&#10;剧名,播放量,剧集数&#10;&quot;Bound by Blood and Sin&quot;,445.3K,80&#10;&quot;Fake Dating the Billionaire&quot;,324.2K,59"></textarea>
+  </div>
+
+  <!-- preview -->
+  <div class="preview-wrap" id="previewWrap">
+    <table class="preview" id="previewTable">
+      <thead></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <!-- actions -->
+  <div class="actions">
+    <div class="status">
+      <span class="status-dot" id="statusDot" style="background:#475569;"></span>
+      <span id="statusText">等待输入数据...</span>
+    </div>
+    <div class="actions-r">
+      <button class="btn btn-secondary" id="clearBtn" style="display:none;">清除</button>
+      <button class="btn btn-primary" id="downloadBtn" disabled>下载 .xlsx</button>
+    </div>
+  </div>
+
+</div>
+
+<div class="footer">FSK Tool</div>
+
+<script>
+(function() {
+  const dropZone   = document.getElementById('dropZone');
+  const fileInput  = document.getElementById('fileInput');
+  const pasteArea  = document.getElementById('pasteArea');
+  const csvText    = document.getElementById('csvText');
+  const previewWrap = document.getElementById('previewWrap');
+  const previewTable = document.getElementById('previewTable');
+  const downloadBtn = document.getElementById('downloadBtn');
+  const clearBtn   = document.getElementById('clearBtn');
+  const statusDot  = document.getElementById('statusDot');
+  const statusText = document.getElementById('statusText');
+
+  let currentMode  = 'upload';  // 'upload' | 'paste'
+  let parsedData   = null;      // { headers: string[], rows: string[][] }
+
+  // ===== tab switch =====
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentMode = btn.dataset.tab;
+      dropZone.style.display   = currentMode === 'upload' ? '' : 'none';
+      pasteArea.style.display  = currentMode === 'paste' ? 'block' : 'none';
+    });
+  });
+
+  // ===== file upload =====
+  dropZone.addEventListener('click', () => fileInput.click());
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file) processFile(file);
+  });
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files[0];
+    if (file) processFile(file);
+    fileInput.value = '';
+  });
+
+  function processFile(file) {
+    const reader = new FileReader();
+    reader.onload = () => parseCSV(reader.result);
+    reader.onerror = () => showStatus('文件读取失败', 'warn');
+    reader.readAsText(file);
+  }
+
+  // ===== paste =====
+  csvText.addEventListener('input', () => {
+    const val = csvText.value.trim();
+    if (val) parseCSV(val);
+    else clearData();
+  });
+
+  // ===== parse CSV =====
+  function parseCSV(raw) {
+    if (!raw || !raw.trim()) { clearData(); return; }
+    try {
+      // auto-detect delimiter
+      const sample = raw.substring(0, 2000);
+      let delim = ',';
+      const counts = { ',': (sample.match(/,/g) || []).length, '\t': (sample.match(/\t/g) || []).length, ';': (sample.match(/;/g) || []).length };
+      if (counts['\t'] > counts[','] && counts['\t'] > counts[';']) delim = '\t';
+      else if (counts[';'] > counts[','] && counts[';'] > counts['\t']) delim = ';';
+
+      // basic CSV parser (handles quoted fields)
+      const lines = [];
+      let current = '';
+      let inQuotes = false;
+      for (let i = 0; i < raw.length; i++) {
+        const ch = raw[i];
+        if (inQuotes) {
+          if (ch === '"') {
+            if (raw[i + 1] === '"') { current += '"'; i++; }
+            else { inQuotes = false; }
+          } else { current += ch; }
+        } else {
+          if (ch === '"') { inQuotes = true; }
+          else if (ch === '\n' || (ch === '\r' && raw[i + 1] === '\n')) {
+            lines.push(current); current = '';
+            if (ch === '\r') i++;
+          } else if (ch === '\r') {
+            lines.push(current); current = '';
+          } else { current += ch; }
+        }
+      }
+      lines.push(current);
+
+      const allRows = [];
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        const cols = [];
+        let col = '';
+        let inQ = false;
+        for (let j = 0; j < trimmed.length; j++) {
+          const c = trimmed[j];
+          if (inQ) {
+            if (c === '"') {
+              if (trimmed[j + 1] === '"') { col += '"'; j++; }
+              else { inQ = false; }
+            } else { col += c; }
+          } else {
+            if (c === '"') { inQ = true; }
+            else if (c === delim) { cols.push(col); col = ''; }
+            else { col += c; }
+          }
+        }
+        cols.push(col);
+        // filter completely empty rows
+        if (cols.some(c => c.trim() !== '')) allRows.push(cols);
+      }
+
+      if (allRows.length === 0) { showStatus('未解析到有效数据', 'warn'); clearData(); return; }
+
+      const headers = allRows[0];
+      const rows = allRows.slice(1);
+      // normalize column count
+      const colCount = headers.length;
+      const normalizedRows = rows.map(r => {
+        if (r.length < colCount) return [...r, ...Array(colCount - r.length).fill('')];
+        return r.slice(0, colCount);
+      });
+
+      parsedData = { headers, rows: normalizedRows };
+      renderPreview();
+      downloadBtn.disabled = false;
+      clearBtn.style.display = '';
+      showStatus(`已解析 ${normalizedRows.length} 行 · ${colCount} 列`, 'ok');
+    } catch (e) {
+      showStatus('解析失败: ' + e.message, 'warn');
+      clearData();
+    }
+  }
+
+  function renderPreview() {
+    if (!parsedData) return;
+    const { headers, rows } = parsedData;
+    // show first 50 rows in preview
+    const displayRows = rows.slice(0, 50);
+
+    let thead = '<tr>';
+    thead += '<th style="width:42px;text-align:center;color:#64748b;">#</th>';
+    headers.forEach(h => { thead += '<th>' + escHtml(h) + '</th>'; });
+    thead += '</tr>';
+
+    let tbody = '';
+    displayRows.forEach((row, i) => {
+      let tr = '<tr>';
+      tr += '<td style="text-align:center;color:#64748b;">' + (i + 1) + '</td>';
+      row.forEach(col => { tr += '<td>' + escHtml(col) + '</td>'; });
+      tr += '</tr>';
+      tbody += tr;
+    });
+
+    if (rows.length > 50) {
+      tbody += '<tr><td colspan="' + (headers.length + 1) + '" style="text-align:center;color:#64748b;padding:10px;">... 仅预览前 50 行，共 ' + rows.length + ' 行</td></tr>';
+    }
+
+    previewTable.querySelector('thead').innerHTML = thead;
+    previewTable.querySelector('tbody').innerHTML = tbody;
+    previewWrap.style.display = '';
+  }
+
+  function escHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  // ===== download xlsx =====
+  downloadBtn.addEventListener('click', () => {
+    if (!parsedData) return;
+    const { headers, rows } = parsedData;
+    const sheetData = [headers, ...rows];
+    const ws = XLSX.utils.aoa_to_sheet(sheetData);
+
+    // auto-fit column width
+    const colWidths = headers.map((h, ci) => {
+      let max = h.length;
+      for (const row of rows) {
+        const len = (row[ci] || '').length;
+        if (len > max) max = len;
+      }
+      return Math.min(max + 4, 60);
+    });
+    ws['!cols'] = colWidths.map(w => ({ wch: w }));
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+    XLSX.writeFile(wb, 'export.xlsx');
+
+    // brief feedback
+    const origText = downloadBtn.textContent;
+    downloadBtn.textContent = '已下载';
+    downloadBtn.style.background = '#10b981';
+    setTimeout(() => {
+      downloadBtn.textContent = origText;
+      downloadBtn.style.background = '';
+    }, 1500);
+  });
+
+  // ===== clear =====
+  clearBtn.addEventListener('click', () => {
+    clearData();
+    csvText.value = '';
+    dropZone.querySelector('.label').textContent = '拖拽 CSV 文件到此处';
+  });
+
+  function clearData() {
+    parsedData = null;
+    previewTable.querySelector('thead').innerHTML = '';
+    previewTable.querySelector('tbody').innerHTML = '';
+    previewWrap.style.display = 'none';
+    downloadBtn.disabled = true;
+    clearBtn.style.display = 'none';
+    showStatus('等待输入数据...', '');
+  }
+
+  function showStatus(msg, type) {
+    statusText.textContent = msg;
+    statusDot.className = 'status-dot';
+    if (type === 'ok')   statusDot.classList.add('ok');
+    if (type === 'warn') statusDot.classList.add('warn');
+    if (!type)           statusDot.style.background = '#475569';
+  }
+})();
+</script>
+
+</body>
+</html>
